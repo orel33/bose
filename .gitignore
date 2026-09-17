@@ -1,0 +1,10 @@
+/backups/
+/logs/
+/.env
+/config/*.local.env
+/.agents/
+/.codex/
+__pycache__/
+*.pyc
+# Essais historiques contenant notamment des identifiants de compte.
+/misc/

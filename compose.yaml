@@ -1,0 +1,35 @@
+services:
+  bose-bridge:
+    # Version 1.8.5 ; code vérifié contre d588efde08faec505d3c3401c1c074076288d501.
+    image: ghcr.io/sandervg/bose-soundtouch-bridge:1.8.5@sha256:b5eb0f483a61013be1868796ee2c9464f8e34a645ab0fc67ef913e8b958e0a5d
+    network_mode: host
+    restart: unless-stopped
+    read_only: true
+    user: "65534:65534"
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    command: ["python3", "-u", "/local/bridge/run.py"]
+    volumes:
+      - ./bridge:/local/bridge:ro
+      - ./tools:/local/tools:ro
+    environment:
+      PYTHONDONTWRITEBYTECODE: "1"
+      BOSE_HOST: ""
+      SPEAKERS_JSON: '[{"host":"192.168.0.152"},{"host":"192.168.0.151"},{"host":"192.168.0.111"}]'
+      SYNC_PRESETS_ON_STARTUP: "false"
+      MQTT_HOST: ""
+      GROUP_MASTER_HOST: "192.168.0.152"
+      # Bouton 3 : playlist Deezer 1227352431 mémorisée nativement sur les Bose.
+      # Laisser vide : l’URL de la page Deezer n’est pas un flux audio UPnP.
+      PRESET_3_URL: ""
+      # 4/5 vides ; 6 = bascule du groupe uniquement sur Veranda (adaptateur local).
+      PRESET_4_URL: ""
+      PRESET_5_URL: ""
+      PRESET_6_URL: ""
+    env_file:
+      - ./config/radios.env
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
