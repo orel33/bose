@@ -1,7 +1,7 @@
 from pathlib import Path
 import sys
 import unittest
-from unittest.mock import patch
+from unittest.mock import call, patch
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -87,8 +87,24 @@ class GroupButtonTests(unittest.TestCase):
         with patch.object(bose, 'request', side_effect=[(b'', playing('INVALID_SOURCE')), (b'', previous)]), \
              patch.object(bose, 'soap') as soap:
             self.button.restore_playback(previous)
-        soap.assert_called_once_with(bose.HOSTS[0], 'SetAVTransportURI', {
-            'InstanceID': 0, 'CurrentURI': 'http://radio.test/live.mp3', 'CurrentURIMetaData': ''})
+        self.assertEqual(soap.call_args_list, [
+            call(bose.HOSTS[0], 'Stop', {'InstanceID': 0}),
+            call(bose.HOSTS[0], 'SetAVTransportURI', {
+                'InstanceID': 0, 'CurrentURI': 'http://radio.test/live.mp3',
+                'CurrentURIMetaData': ''}),
+            call(bose.HOSTS[0], 'Play', {'InstanceID': 0, 'Speed': '1'}),
+        ])
+
+    def test_paused_radio_is_repaused_after_restart(self):
+        previous = playing('UPNP', 'http://radio.test/live.mp3', 'PAUSE_STATE')
+        resumed = playing('UPNP', 'http://radio.test/live.mp3')
+        with patch.object(bose, 'request', side_effect=[
+                (b'', playing('INVALID_SOURCE')), (b'', resumed),
+                (b'', ET.Element('status'))]) as request, \
+             patch.object(bose, 'soap'):
+            self.button.restore_playback(previous)
+        request.assert_called_with(bose.HOSTS[0], 'key',
+            b'<key state="release" sender="Gabbo">PAUSE</key>')
 
     def test_deezer_restored_via_native_select(self):
         previous = playing()

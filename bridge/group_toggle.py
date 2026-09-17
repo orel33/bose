@@ -91,8 +91,12 @@ class GroupButton:
             url = content.get('location')
             if not url or not url.startswith(('http://', 'https://')):
                 raise RuntimeError('URL de la lecture précédente indisponible')
+            # Vider la lecture précédente avant de reprendre le flux courant.
+            # SetAVTransportURI seul ne garantit pas le renouvellement audio.
+            bose.soap(self.host, 'Stop', {'InstanceID': 0})
             bose.soap(self.host, 'SetAVTransportURI', {
                 'InstanceID': 0, 'CurrentURI': url, 'CurrentURIMetaData': ''})
+            bose.soap(self.host, 'Play', {'InstanceID': 0, 'Speed': '1'})
         else:
             bose.request(self.host, 'select', ET.tostring(content))
         for _ in range(20):
