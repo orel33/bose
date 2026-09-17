@@ -122,8 +122,14 @@ URL et utilise les événements des presets déjà enregistrés.
 La synchronisation `SYNC_PRESETS_ON_STARTUP` reste désactivée : le bridge
 ne modifie aucun preset au démarrage.
 Les boutons 4/5/6 restent sans URL.
-Un appui répété sur une radio relance le flux ; RTL2 peut présenter des coupures
-ou répéter un passage lors de ces relances.
+
+> [!WARNING]
+> **RTL2 : publicité au démarrage (« pré-roll »).** Le flux utilisé passe par
+> Audiomeans et peut diffuser une publicité avant de rejoindre le direct.
+> Chaque nouvel appui sur le bouton **3** arrête puis reconnecte le flux : il peut
+> donc déclencher une nouvelle publicité, donnant l'impression de revenir en
+> arrière. Ce comportement peut être lié au pré-roll plutôt qu'à un problème de
+> buffering. Éviter les appuis répétés lorsque RTL2 joue déjà.
 
 ```bash
 docker compose ps                 # État du conteneur
@@ -135,6 +141,49 @@ docker compose down               # Arrêter et retirer le conteneur
 L'arrêt du conteneur ne supprime pas les presets. Les logs sont
 limités à trois fichiers de 5 Mo. Un conteneur « Up » doit aussi avoir ses
 connexions `ws connected` pour rendre les boutons opérationnels.
+
+## Flux radio et écoute directe sous Linux
+
+Les adresses ci-dessous correspondent à [`config/radios.env`](config/radios.env).
+Les trois flux sont au format MP3, à 128 kbit/s.
+
+| Bouton | Radio | URL du flux | Destination après redirection |
+| --- | --- | --- | --- |
+| **1** | France Inter | `http://direct.franceinter.fr/live/franceinter-midfi.mp3` | `http://icecast.radiofrance.fr/franceinter-midfi.mp3` |
+| **2** | France Info | `http://direct.franceinfo.fr/live/franceinfo-midfi.mp3` | `http://icecast.radiofrance.fr/franceinfo-midfi.mp3` |
+| **3** | RTL2 | `http://icecast.rtl2.fr/rtl2-1-44-128` | Audiomeans (`streaming-ice.audiomeans.fr`) |
+
+Pour écouter sur l'ordinateur Linux, installer **mpv**. Sur Debian, Ubuntu ou
+Raspberry Pi OS :
+
+```bash
+sudo apt install mpv
+```
+
+Lancer **une** des commandes suivantes dans un terminal :
+
+```bash
+# France Inter
+mpv --no-video 'http://direct.franceinter.fr/live/franceinter-midfi.mp3'
+
+# France Info
+mpv --no-video 'http://direct.franceinfo.fr/live/franceinfo-midfi.mp3'
+
+# RTL2
+mpv --no-video 'http://icecast.rtl2.fr/rtl2-1-44-128'
+```
+
+Appuyer sur **q** ou **Ctrl+C** pour arrêter. Cette écoute utilise la sortie audio
+de l'ordinateur, sans Docker ni enceinte Bose. Les redirections sont suivies
+automatiquement ; le pré-roll RTL2 peut également se produire avec ce lecteur.
+Voir la [documentation de mpv](https://mpv.io/manual/stable/).
+
+Avec **VLC**, ouvrir **Média → Ouvrir un flux réseau**, puis coller l'URL de la
+radio souhaitée. Depuis un terminal, on peut aussi lancer :
+
+```bash
+vlc 'http://icecast.rtl2.fr/rtl2-1-44-128'
+```
 
 ## À quoi sert tools/bose.py ?
 
