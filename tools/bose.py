@@ -7,7 +7,6 @@ import json
 from pathlib import Path
 import socket
 import sys
-import time
 import urllib.request
 import xml.etree.ElementTree as ET
 
@@ -36,7 +35,7 @@ def backup(hosts):
     errors = []
     for host in hosts:
         try:
-            for endpoint in ('info', 'presets', 'sources', 'now_playing', 'getZone'):
+            for endpoint in ('info', 'presets', 'sources', 'now_playing'):
                 raw, _ = request(host, endpoint)
                 save(directory / f'{endpoint}-{host}.xml', raw)
             print(f'{host}: sauvegarde XML complète')
@@ -124,78 +123,19 @@ def status(host):
     print('Presets :', ', '.join(f'{n}={c.get("source")}' for n, c in presets.items()))
 
 
-def zone(host, action, hosts=None):
-    """Groupe natif des trois Bose ; host désigne l'enceinte principale."""
-    hosts = tuple(hosts or HOSTS)
-    if host not in hosts or len(set(hosts)) != len(hosts):
-        raise ValueError('Configuration du groupe invalide')
-    if action == 'status':
-        for member_host in hosts:
-            root = request(member_host, 'getZone')[1]
-            members = [m.get('ipaddress') for m in root.findall('member')]
-            print(f'{member_host}: maître={root.get("master") or "aucun"}, membres={members}')
-        return
-    identities = {h: request(h, 'info')[1].get('deviceID') for h in hosts}
-    if not all(identities.values()) or len(set(identities.values())) != len(hosts):
-        raise ValueError('Identités des enceintes absentes ou dupliquées')
-    current = request(host, 'getZone')[1]
-    if action == 'toggle':
-        if current.get('master') and current.get('master') != identities[host]:
-            raise ValueError('Cette enceinte est secondaire dans un autre groupe')
-        action = 'leave' if current.get('master') else 'join'
-    if action == 'leave':
-        if not current.get('master'):
-            print(f'{host}: aucun groupe à séparer')
-            return
-        if current.get('master') != identities[host]:
-            raise ValueError('Indiquer avec --host le maître actuel du groupe')
-    if action == 'join':
-        body = ET.Element('zone', master=identities[host])
-        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
-            sock.connect((host, 8090))
-            body.set('senderIPAddress', sock.getsockname()[0])
-        for h in hosts:
-            ET.SubElement(body, 'member', ipaddress=h).text = identities[h]
-        request(host, 'setZone', ET.tostring(body))
-    else:
-        # Le firmware ST10 testé ne retire que le premier membre d'une requête.
-        # Retirer séparément chaque membre présent, y compris dans un groupe partiel.
-        members = {m.get('ipaddress') for m in current.findall('member')}
-        for h in hosts:
-            if h != host and h in members:
-                body = ET.Element('zone', master=identities[host])
-                ET.SubElement(body, 'member', ipaddress=h).text = identities[h]
-                request(host, 'removeZoneSlave', ET.tostring(body))
-    for _ in range(10):
-        time.sleep(0.5)
-        zones = {h: request(h, 'getZone')[1] for h in hosts}
-        if action == 'join':
-            complete = (all(z.get('master') == identities[host] for z in zones.values())
-                        and {m.get('ipaddress') for m in zones[host].findall('member')} == set(hosts))
-        else:
-            complete = all(not z.get('master') for z in zones.values())
-        if complete:
-            print('Groupe natif confirmé ; vérifier la synchronisation à l’écoute.' if action == 'join'
-                  else 'Les trois enceintes sont séparées.')
-            return action
-    raise RuntimeError('État du groupe non confirmé ; consulter zone status')
-
-
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--host', default=HOSTS[0], choices=HOSTS)
     sub = parser.add_subparsers(dest='command', required=True)
     sub.add_parser('status')
     sub.add_parser('probe')
-    z = sub.add_parser('zone', help='Grouper/séparer les trois Bose ou lire leur groupe')
-    z.add_argument('action', choices=('status', 'join', 'leave', 'toggle'))
     b = sub.add_parser('backup')
     b.add_argument('--all', action='store_true')
     p = sub.add_parser('radio')
     p.add_argument('slot', choices=('1', '2'))
     sub.add_parser('play', help='Envoyer Play séparément si nécessaire')
     k = sub.add_parser('key', help='Appui court simulé, sans mémorisation')
-    k.add_argument('slot', choices=('1', '2', '3', '6'))
+    k.add_argument('slot', choices=('1', '2', '3'))
     for name in ('compare', 'restore'):
         p = sub.add_parser(name)
         p.add_argument('directory', type=Path)
@@ -206,8 +146,6 @@ def main():
         backup(list(HOSTS) if args.all else [args.host])
     elif args.command == 'status':
         status(args.host)
-    elif args.command == 'zone':
-        zone(args.host, args.action)
     elif args.command == 'probe':
         for port in (8080, 8090, 8091):
             with socket.create_connection((args.host, port), 3):

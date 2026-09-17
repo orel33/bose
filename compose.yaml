@@ -8,21 +8,16 @@ services:
     user: "65534:65534"
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
-    command: ["python3", "-u", "/local/bridge/run.py"]
-    volumes:
-      - ./bridge:/local/bridge:ro
-      - ./tools:/local/tools:ro
     environment:
       PYTHONDONTWRITEBYTECODE: "1"
       BOSE_HOST: ""
       SPEAKERS_JSON: '[{"host":"192.168.0.152"},{"host":"192.168.0.151"},{"host":"192.168.0.111"}]'
       SYNC_PRESETS_ON_STARTUP: "false"
       MQTT_HOST: ""
-      GROUP_MASTER_HOST: "192.168.0.152"
       # Bouton 3 : playlist Deezer 1227352431 mémorisée nativement sur les Bose.
       # Laisser vide : l’URL de la page Deezer n’est pas un flux audio UPnP.
       PRESET_3_URL: ""
-      # 4/5 vides ; 6 = bascule du groupe uniquement sur Veranda (adaptateur local).
+      # Boutons 4/5/6 : aucune affectation.
       PRESET_4_URL: ""
       PRESET_5_URL: ""
       PRESET_6_URL: ""
