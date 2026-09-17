@@ -14,9 +14,7 @@ services:
       SPEAKERS_JSON: '[{"host":"192.168.0.152"},{"host":"192.168.0.151"},{"host":"192.168.0.111"}]'
       SYNC_PRESETS_ON_STARTUP: "false"
       MQTT_HOST: ""
-      # Bouton 3 : playlist Deezer 1227352431 mémorisée nativement sur les Bose.
-      # Laisser vide : l’URL de la page Deezer n’est pas un flux audio UPnP.
-      PRESET_3_URL: ""
+      # Bouton 3 : RTL2, configuré dans config/radios.env.
       # Boutons 4/5/6 : aucune affectation.
       PRESET_4_URL: ""
       PRESET_5_URL: ""
