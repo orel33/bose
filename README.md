@@ -88,7 +88,7 @@ aucune compilation n'est nécessaire. Le bridge a été installé sur un Raspber
    | --- | --- |
    | Bose Veranda | `192.168.0.152` |
    | Bose Cuisine | `192.168.0.151` |
-   | Bose Chambre | `192.168.0.111` |
+   | Bose Chambre | `192.168.0.153` |
 
    Si les IP changent, adapter aussi la liste `HOSTS` de `tools/bose.py`.
 

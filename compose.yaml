@@ -11,7 +11,7 @@ services:
     environment:
       PYTHONDONTWRITEBYTECODE: "1"
       BOSE_HOST: ""
-      SPEAKERS_JSON: '[{"host":"192.168.0.152"},{"host":"192.168.0.151"},{"host":"192.168.0.111"}]'
+      SPEAKERS_JSON: '[{"host":"192.168.0.152"},{"host":"192.168.0.151"},{"host":"192.168.0.153"}]'
       SYNC_PRESETS_ON_STARTUP: "false"
       MQTT_HOST: ""
       # Bouton 3 : RTL2, configuré dans config/radios.env.

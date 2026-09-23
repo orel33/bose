@@ -11,7 +11,7 @@ import urllib.request
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
-HOSTS = ('192.168.0.152', '192.168.0.151', '192.168.0.111')
+HOSTS = ('192.168.0.152', '192.168.0.151', '192.168.0.153')
 HTTP = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
 
