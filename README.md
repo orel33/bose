@@ -51,6 +51,10 @@ UPnP peut aussi utiliser SSDP, multicast UDP vers le port 1900. Tout reste sur
 le LAN pour le pilotage ; Internet est nécessaire pour les radios.
 Aucune redirection de ports sur la box n'est nécessaire.
 
+Le port **17000/TCP** des enceintes donne aussi accès à une console de diagnostic
+Telnet, utilisée pour le [redémarrage d’une Bose](#redémarrer-une-enceinte-bose).
+Le bridge n’utilise pas ce port.
+
 ### Faut-il laisser la machine allumée ?
 
 **Oui, pour les radios sur 1 à 5.**
@@ -88,8 +92,8 @@ aucune compilation n'est nécessaire. Le bridge a été installé sur un Raspber
 
    | Enceinte | Adresse |
    | --- | --- |
-   | Bose Veranda | `192.168.0.152` |
    | Bose Cuisine | `192.168.0.151` |
+   | Bose Veranda | `192.168.0.152` |
    | Bose Chambre | `192.168.0.153` |
 
    Si les IP changent, adapter aussi la liste `HOSTS` de `tools/bose.py`.
@@ -115,6 +119,29 @@ et éviter sa mise en veille. Si une Bose était indisponible au démarrage et
 n'apparaît pas connectée dans les logs, la rallumer puis lancer
 `docker compose restart`.
 
+## Mettre à jour le bridge sur le RPI5
+
+Après avoir commité et poussé les modifications depuis le PC, exécuter dans un
+terminal sur le Pi :
+
+```bash
+cd ~/bose
+git pull --ff-only
+docker compose config --quiet
+docker compose up -d
+docker compose logs --tail 50
+```
+
+Continuer seulement si chaque commande réussit. Si Git signale des modifications
+locales, les examiner et les conserver avant de reprendre la mise à jour.
+`docker compose up -d` prend en compte les changements de `compose.yaml` et de
+`config/radios.env` ; un simple `docker compose restart` ne recharge pas les
+variables d’environnement modifiées.
+
+Vérifier un message `ws connected` pour chaque enceinte. La mise à jour du dépôt
+et du conteneur ne mémorise pas de nouveaux presets dans les enceintes, car
+`SYNC_PRESETS_ON_STARTUP=false`.
+
 ## Utilisation et réglages
 
 Les noms et adresses des radios sont dans [`config/radios.env`](config/radios.env).
@@ -138,6 +165,126 @@ docker compose down               # Arrêter et retirer le conteneur
 L'arrêt du conteneur ne supprime pas les presets. Les logs sont
 limités à trois fichiers de 5 Mo. Un conteneur « Up » doit aussi avoir ses
 connexions `ws connected` pour rendre les boutons opérationnels.
+
+### Activer un bouton auparavant vide
+
+Il faut à la fois configurer son URL dans `config/radios.env`, appliquer cette
+configuration au bridge et enregistrer un preset sur l’enceinte via
+`POST /storePreset`. Sur cette installation, les presets 3/4/5 ont déjà été
+mémorisés sur les trois Bose ; il n’est pas nécessaire de les recréer après
+chaque `git pull`.
+
+**Un redémarrage de l’enceinte peut être nécessaire pour activer physiquement un
+nouveau bouton.** Lors du test sur Veranda du 25 septembre 2026 :
+
+- Le bouton 3, déjà actif avec RTL2, a lancé Nova sans redémarrage.
+- Les nouveaux presets 4 (FIP) et 5 (Radio Paradise) étaient visibles dans l’API
+  et fonctionnaient avec des appuis simulés, mais pas avec les boutons physiques.
+- Après un débranchement/rebranchement de Veranda, les boutons 4 et 5 ont fonctionné.
+
+Cela suggère un état interne à recharger pour les boutons auparavant vides ; la
+cause précise n’a pas été établie. Ce constat ne signifie pas que tout changement
+de radio impose un redémarrage.
+
+Pour valider une affectation, **tester un appui court sur le bouton physique**
+après reconnexion. La présence du preset dans `/presets` ou le succès de
+`python3 tools/bose.py key 4` ne suffisent pas. Dans les logs du bridge, chercher
+`physical preset button 4 detected`, puis `playing local preset 4`. Le mot
+`physical` apparaît aussi pour les appuis simulés : faire le test sans commande
+réseau concurrente et vérifier le son.
+
+## Redémarrer une enceinte Bose
+
+Le redémarrage de l’enceinte est distinct de celui du bridge :
+`docker compose restart` redémarre seulement le conteneur sur le Pi.
+
+### Avec tools/bose.py
+
+Depuis le dossier du projet, sur le PC ou le Pi connecté au même réseau :
+
+```bash
+# Redémarrer uniquement Bose Cuisine
+python3 tools/bose.py --host 192.168.0.151 reboot
+```
+
+Remplacer l’adresse par `192.168.0.152` pour Veranda ou `192.168.0.153` pour
+Chambre. Sans `--host`, l’outil cible **Veranda**, comme ses autres commandes.
+
+La commande agit immédiatement sur l’enceinte sélectionnée : elle attend
+l’invite `->` de la console du port 17000, puis envoie `sys reboot`. Elle utilise
+uniquement Python, sans client Telnet à installer et sans SSH. Une console
+inaccessible ou sans invite provoque une erreur avant l’envoi. La commande n’est
+pas réessayée automatiquement si l’envoi échoue.
+
+Le message de succès indique que la commande a été envoyée, pas que l’enceinte
+est déjà revenue. Attendre environ une minute puis exécuter :
+
+```bash
+python3 tools/bose.py --host 192.168.0.151 status
+```
+
+La commande a été testée avec une console simulée ; aucun redémarrage réel n’a
+été lancé pendant son développement.
+
+### Par la console Telnet
+
+Depuis le PC ou le Pi, sur le même réseau local, ouvrir la console de l’enceinte
+souhaitée. Pour **Bose Cuisine** :
+
+```bash
+telnet 192.168.0.151 17000
+```
+
+À l’invite `->`, saisir :
+
+```text
+sys reboot
+```
+
+La commande lance un redémarrage du système, sans réinitialisation des réglages.
+La connexion se coupe ; compter environ 45 à 60 secondes avant le retour de
+l’API, parfois davantage pour la reconnexion Wi-Fi. C’est une connexion **Telnet
+directe à la Bose**, sans SSH ni connexion au Raspberry Pi.
+
+| Enceinte | Commande de connexion |
+| --- | --- |
+| Cuisine | `telnet 192.168.0.151 17000` |
+| Veranda | `telnet 192.168.0.152 17000` |
+| Chambre | `telnet 192.168.0.153 17000` |
+
+Si le client Telnet manque, l’installer avec `sudo apt install telnet` sur
+Debian, Ubuntu ou Raspberry Pi OS. La console n’accepte qu’une session à la fois.
+
+La commande `sys reboot` est décrite dans la
+[documentation BoseSoundTouchApi, méthode RebootDevice](https://bosesoundtouchapi.readthedocs.io/en/latest/bosesoundtouchapi/soundtouchdevice.html#SoundTouchDevice.RebootDevice).
+Sur Cuisine, le port 17000 et l’invite `->` ont été vérifiés le 25 septembre 2026 ;
+**aucun redémarrage Telnet n’a été exécuté lors de cette vérification**.
+
+### Par l’alimentation
+
+Si la console est inaccessible, débrancher puis rebrancher l’alimentation de
+l’enceinte et attendre sa reconnexion Wi-Fi. C’est la méthode qui a rétabli les
+boutons 4 et 5 sur Veranda.
+
+### Vérifier après le redémarrage
+
+Depuis le dossier du projet, vérifier que Cuisine répond :
+
+```bash
+python3 tools/bose.py --host 192.168.0.151 status
+```
+
+Sur le Pi, vérifier la reconnexion du bridge :
+
+```bash
+cd ~/bose
+docker compose logs --tail 50
+```
+
+Si aucune nouvelle connexion `ws connected` n’apparaît pour l’enceinte alors
+qu’elle répond à nouveau, lancer `docker compose restart` sur le Pi. Enfin,
+essayer physiquement les boutons 4 et 5 et vérifier la lecture de FIP et de
+Radio Paradise.
 
 ## Flux radio et écoute directe sous Linux
 
@@ -204,6 +351,7 @@ Depuis ce dossier, sur le Pi ou un autre ordinateur du LAN :
 python3 tools/bose.py status                         # État de Veranda par défaut
 python3 tools/bose.py --host 192.168.0.151 status      # État de Cuisine
 python3 tools/bose.py probe                          # Tester les trois ports de Veranda
+python3 tools/bose.py --host 192.168.0.151 reboot      # Redémarrer Cuisine via Telnet
 python3 tools/bose.py key 1                          # Simuler le bouton 1 (bridge requis)
 python3 tools/bose.py key 3                          # Simuler le bouton 3 Nova
 python3 tools/bose.py radio 1                        # Lancer directement France Inter, sans bridge

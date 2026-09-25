@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Diagnostics Bose, sauvegardes et lecture sans dépendances Python externes."""
+"""Diagnostics Bose, sauvegardes, lecture et redémarrage sans dépendances Python externes."""
 import argparse
 import copy
 from datetime import datetime
@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 import socket
 import sys
+import time
 import urllib.request
 import xml.etree.ElementTree as ET
 
@@ -115,6 +116,31 @@ def soap(host, action, values):
                      'SOAPAction': f'"urn:schemas-upnp-org:service:AVTransport:1#{action}"'})
 
 
+def reboot(host):
+    """Envoyer sys reboot à la console de diagnostic TCP, sans SSH."""
+    with socket.create_connection((host, 17000), timeout=6) as connection:
+        deadline = time.monotonic() + 6
+        banner = bytearray()
+        # Attendre l’invite, y compris si elle arrive en plusieurs paquets.
+        while not banner.rstrip().endswith(b'->'):
+            remaining = deadline - time.monotonic()
+            if remaining <= 0 or len(banner) >= 4096:
+                raise RuntimeError('Invite de diagnostic -> absente ; aucune commande envoyée.')
+            connection.settimeout(remaining)
+            try:
+                chunk = connection.recv(1024)
+            except socket.timeout as exc:
+                raise RuntimeError('Invite de diagnostic -> absente ; aucune commande envoyée.') from exc
+            if not chunk:
+                raise RuntimeError('Console fermée avant son invite ; aucune commande envoyée.')
+            banner.extend(chunk)
+        connection.settimeout(6)
+        connection.sendall(b'sys reboot\r\n')
+    print(f'{host}: commande sys reboot envoyée sur le port 17000.')
+    print('Attendre environ une minute, puis vérifier avec la commande status. '
+          'Le retour de l’enceinte n’est pas vérifié automatiquement.')
+
+
 def status(host):
     info = request(host, 'info')[1]
     playing = request(host, 'now_playing')[1]
@@ -129,6 +155,7 @@ def main():
     sub = parser.add_subparsers(dest='command', required=True)
     sub.add_parser('status')
     sub.add_parser('probe')
+    sub.add_parser('reboot', help='Redémarrer immédiatement la Bose sélectionnée via Telnet (port 17000)')
     b = sub.add_parser('backup')
     b.add_argument('--all', action='store_true')
     p = sub.add_parser('radio')
@@ -146,6 +173,8 @@ def main():
         backup(list(HOSTS) if args.all else [args.host])
     elif args.command == 'status':
         status(args.host)
+    elif args.command == 'reboot':
+        reboot(args.host)
     elif args.command == 'probe':
         for port in (8080, 8090, 8091):
             with socket.create_connection((args.host, port), 3):

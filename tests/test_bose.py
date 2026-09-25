@@ -2,7 +2,7 @@ import importlib.util
 from pathlib import Path
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 import xml.etree.ElementTree as ET
 
 spec = importlib.util.spec_from_file_location('bose', Path(__file__).resolve().parents[1] / 'tools/bose.py')
@@ -60,6 +60,61 @@ class RestoreSafety(unittest.TestCase):
         with patch.object(bose, 'request', side_effect=self.request), patch.object(bose, 'backup', side_effect=RuntimeError), self.assertRaises(RuntimeError):
             bose.restore(self.host, self.directory, True)
         self.assertEqual(self.writes, [])
+
+
+class Reboot(unittest.TestCase):
+    def setUp(self):
+        self.connection = MagicMock()
+        self.connection.__enter__.return_value = self.connection
+        self.connect = patch.object(bose.socket, 'create_connection', return_value=self.connection)
+        self.create_connection = self.connect.start()
+        self.addCleanup(self.connect.stop)
+        self.output = patch('builtins.print')
+        self.output.start()
+        self.addCleanup(self.output.stop)
+
+    def test_cuisine_cli_waits_for_fragmented_prompt_and_sends_once(self):
+        self.connection.recv.side_effect = [b'Console\r\n-', b'>']
+        with patch('sys.argv', ['bose.py', '--host', '192.168.0.151', 'reboot']):
+            bose.main()
+        self.create_connection.assert_called_once_with(('192.168.0.151', 17000), timeout=6)
+        self.connection.sendall.assert_called_once_with(b'sys reboot\r\n')
+        self.connection.__exit__.assert_called_once()
+
+    def test_closed_console_sends_nothing(self):
+        self.connection.recv.return_value = b''
+        with self.assertRaisesRegex(RuntimeError, 'Console fermée'):
+            bose.reboot('192.168.0.151')
+        self.connection.sendall.assert_not_called()
+
+    def test_timeout_sends_nothing(self):
+        self.connection.recv.side_effect = bose.socket.timeout()
+        with self.assertRaisesRegex(RuntimeError, 'Invite de diagnostic'):
+            bose.reboot('192.168.0.151')
+        self.connection.sendall.assert_not_called()
+
+    def test_unexpected_banner_is_bounded(self):
+        self.connection.recv.return_value = b'x' * 1024
+        with self.assertRaisesRegex(RuntimeError, 'Invite de diagnostic'):
+            bose.reboot('192.168.0.151')
+        self.assertEqual(self.connection.recv.call_count, 4)
+        self.connection.sendall.assert_not_called()
+
+    def test_prompt_deadline_does_not_reset_for_each_chunk(self):
+        self.connection.recv.return_value = b'-'
+        with patch.object(bose.time, 'monotonic', side_effect=[0, 1, 7]):
+            with self.assertRaisesRegex(RuntimeError, 'Invite de diagnostic'):
+                bose.reboot('192.168.0.151')
+        self.connection.recv.assert_called_once()
+        self.connection.sendall.assert_not_called()
+
+    def test_send_failure_is_not_retried(self):
+        self.connection.recv.return_value = b'->'
+        self.connection.sendall.side_effect = BrokenPipeError()
+        with self.assertRaises(BrokenPipeError):
+            bose.reboot('192.168.0.151')
+        self.connection.sendall.assert_called_once()
+        self.create_connection.assert_called_once()
 
 
 if __name__ == '__main__':
