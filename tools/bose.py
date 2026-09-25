@@ -132,10 +132,10 @@ def main():
     b = sub.add_parser('backup')
     b.add_argument('--all', action='store_true')
     p = sub.add_parser('radio')
-    p.add_argument('slot', choices=('1', '2', '3'))
+    p.add_argument('slot', choices=('1', '2', '3', '4', '5'))
     sub.add_parser('play', help='Envoyer Play séparément si nécessaire')
     k = sub.add_parser('key', help='Appui court simulé, sans mémorisation')
-    k.add_argument('slot', choices=('1', '2', '3'))
+    k.add_argument('slot', choices=('1', '2', '3', '4', '5'))
     for name in ('compare', 'restore'):
         p = sub.add_parser(name)
         p.add_argument('directory', type=Path)

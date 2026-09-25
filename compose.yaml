@@ -14,10 +14,8 @@ services:
       SPEAKERS_JSON: '[{"host":"192.168.0.152"},{"host":"192.168.0.151"},{"host":"192.168.0.153"}]'
       SYNC_PRESETS_ON_STARTUP: "false"
       MQTT_HOST: ""
-      # Bouton 3 : RTL2, configuré dans config/radios.env.
-      # Boutons 4/5/6 : aucune affectation.
-      PRESET_4_URL: ""
-      PRESET_5_URL: ""
+      # Boutons 1 à 5 : radios configurées dans config/radios.env.
+      # Bouton 6 : aucune affectation.
       PRESET_6_URL: ""
     env_file:
       - ./config/radios.env

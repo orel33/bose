@@ -7,10 +7,12 @@ Docker sur le réseau de la maison. Aucun Home Assistant ni MQTT n'est nécessai
 | --- | --- | --- |
 | **1** | France Inter en direct | Le bridge lance la radio |
 | **2** | France Info en direct | Le bridge lance la radio |
-| **3** | RTL2 en direct | Le bridge lance la radio |
-| **4–6** | Vides, réservés pour un futur usage | Aucune affectation |
+| **3** | Radio Nova en direct | Le bridge lance la radio |
+| **4** | FIP en direct | Le bridge lance la radio |
+| **5** | Radio Paradise (Main Mix) | Le bridge lance la radio |
+| **6** | Vide, réservé pour un futur usage | Aucune affectation |
 
-Les boutons 4/5/6 sont vides sur les trois enceintes.
+Le bouton 6 est vide sur les trois enceintes.
 
 ## Comment ça fonctionne
 
@@ -22,14 +24,14 @@ Ce dépôt fournit sa configuration et un outil de commande complémentaire.
 Le conteneur utilise directement le bridge communautaire.
 
 1. Le bridge se connecte à chaque enceinte et attend les événements de ses boutons.
-2. Un appui court sur **1, 2 ou 3** lui fait envoyer l'adresse de la radio à cette Bose.
+2. Un appui court sur **1 à 5** lui fait envoyer l'adresse de la radio à cette Bose.
 3. **La Bose télécharge et lit elle-même le flux audio.** Le son ne transite pas par le PC ou le Raspberry Pi.
 
 ```mermaid
 flowchart LR
     B[Enceinte Bose] -->|Événement du bouton · WebSocket 8080| P[Bridge Docker · PC ou Raspberry Pi]
     P -->|Commandes · HTTP 8090 / UPnP 8091| B
-    R[Radio France / RTL2] -->|Flux audio Internet| B
+    R[Radio France / Nova / Radio Paradise] -->|Flux audio Internet| B
     T[tools/bose.py · commande ponctuelle] -->|API locale 8090 / 8091| B
 ```
 
@@ -51,7 +53,7 @@ Aucune redirection de ports sur la box n'est nécessaire.
 
 ### Faut-il laisser la machine allumée ?
 
-**Oui, pour les radios sur 1/2/3.**
+**Oui, pour les radios sur 1 à 5.**
 Docker maintient le bridge en arrière-plan, même après fermeture du terminal.
 Si le bridge s'arrête, une lecture déjà lancée peut continuer.
 
@@ -117,19 +119,14 @@ n'apparaît pas connectée dans les logs, la rallumer puis lancer
 
 Les noms et adresses des radios sont dans [`config/radios.env`](config/radios.env).
 Après modification, appliquer la configuration avec `docker compose up -d`.
-Les boutons **1/2/3 ne sont pas réécrits au démarrage** : le bridge charge leurs
+Les boutons **1 à 5 ne sont pas réécrits au démarrage** : le bridge charge leurs
 URL et utilise les événements des presets déjà enregistrés.
 La synchronisation `SYNC_PRESETS_ON_STARTUP` reste désactivée : le bridge
 ne modifie aucun preset au démarrage.
-Les boutons 4/5/6 restent sans URL.
-
-> [!WARNING]
-> **RTL2 : publicité au démarrage (« pré-roll »).** Le flux utilisé passe par
-> Audiomeans et peut diffuser une publicité avant de rejoindre le direct.
-> Chaque nouvel appui sur le bouton **3** arrête puis reconnecte le flux : il peut
-> donc déclencher une nouvelle publicité, donnant l'impression de revenir en
-> arrière. Ce comportement peut être lié au pré-roll plutôt qu'à un problème de
-> buffering. Éviter les appuis répétés lorsque RTL2 joue déjà.
+Le bouton 6 reste sans URL. Les presets 3/4/5 sont enregistrés sur chaque
+enceinte en `LOCAL_INTERNET_RADIO` avec le nom et l’URL de la radio. Un bouton
+vide n’émet pas l’événement attendu : ajouter son URL au fichier ne suffit pas
+pour l’activer sur une nouvelle enceinte.
 
 ```bash
 docker compose ps                 # État du conteneur
@@ -145,13 +142,15 @@ connexions `ws connected` pour rendre les boutons opérationnels.
 ## Flux radio et écoute directe sous Linux
 
 Les adresses ci-dessous correspondent à [`config/radios.env`](config/radios.env).
-Les trois flux sont au format MP3, à 128 kbit/s.
+Les cinq flux sont au format MP3, à 128 kbit/s.
 
 | Bouton | Radio | URL du flux | Destination après redirection |
 | --- | --- | --- | --- |
 | **1** | France Inter | `http://direct.franceinter.fr/live/franceinter-midfi.mp3` | `http://icecast.radiofrance.fr/franceinter-midfi.mp3` |
 | **2** | France Info | `http://direct.franceinfo.fr/live/franceinfo-midfi.mp3` | `http://icecast.radiofrance.fr/franceinfo-midfi.mp3` |
-| **3** | RTL2 | `http://icecast.rtl2.fr/rtl2-1-44-128` | Audiomeans (`streaming-ice.audiomeans.fr`) |
+| **3** | Radio Nova | `http://novazz.ice.infomaniak.ch/novazz-128.mp3` | Aucune lors de la vérification |
+| **4** | FIP | `http://direct.fipradio.fr/live/fip-midfi.mp3` | `http://icecast.radiofrance.fr/fip-midfi.mp3` |
+| **5** | Radio Paradise | `http://stream.radioparadise.com/mp3-128` | Aucune lors de la vérification |
 
 Pour écouter sur l'ordinateur Linux, installer **mpv**. Sur Debian, Ubuntu ou
 Raspberry Pi OS :
@@ -169,20 +168,26 @@ mpv --no-video 'http://direct.franceinter.fr/live/franceinter-midfi.mp3'
 # France Info
 mpv --no-video 'http://direct.franceinfo.fr/live/franceinfo-midfi.mp3'
 
-# RTL2
-mpv --no-video 'http://icecast.rtl2.fr/rtl2-1-44-128'
+# Radio Nova
+mpv --no-video 'http://novazz.ice.infomaniak.ch/novazz-128.mp3'
+
+# FIP
+mpv --no-video 'http://direct.fipradio.fr/live/fip-midfi.mp3'
+
+# Radio Paradise
+mpv --no-video 'http://stream.radioparadise.com/mp3-128'
 ```
 
 Appuyer sur **q** ou **Ctrl+C** pour arrêter. Cette écoute utilise la sortie audio
 de l'ordinateur, sans Docker ni enceinte Bose. Les redirections sont suivies
-automatiquement ; le pré-roll RTL2 peut également se produire avec ce lecteur.
+automatiquement ; ce lecteur ne supprime pas les éventuelles publicités du flux.
 Voir la [documentation de mpv](https://mpv.io/manual/stable/).
 
 Avec **VLC**, ouvrir **Média → Ouvrir un flux réseau**, puis coller l'URL de la
 radio souhaitée. Depuis un terminal, on peut aussi lancer :
 
 ```bash
-vlc 'http://icecast.rtl2.fr/rtl2-1-44-128'
+vlc 'http://novazz.ice.infomaniak.ch/novazz-128.mp3'
 ```
 
 ## À quoi sert tools/bose.py ?
@@ -200,15 +205,17 @@ python3 tools/bose.py status                         # État de Veranda par déf
 python3 tools/bose.py --host 192.168.0.151 status      # État de Cuisine
 python3 tools/bose.py probe                          # Tester les trois ports de Veranda
 python3 tools/bose.py key 1                          # Simuler le bouton 1 (bridge requis)
-python3 tools/bose.py key 3                          # Simuler le bouton 3 RTL2
+python3 tools/bose.py key 3                          # Simuler le bouton 3 Nova
 python3 tools/bose.py radio 1                        # Lancer directement France Inter, sans bridge
+python3 tools/bose.py radio 4                        # Lancer directement FIP
+python3 tools/bose.py radio 5                        # Lancer directement Radio Paradise
 python3 tools/bose.py --help
 ```
 
 ## Contenu du dépôt
 
 - [`compose.yaml`](compose.yaml) : lancement du bridge Docker.
-- [`config/radios.env`](config/radios.env) : configuration des trois radios.
+- [`config/radios.env`](config/radios.env) : configuration des cinq radios.
 - [`tools/bose.py`](tools/bose.py) : commandes manuelles et diagnostic.
 - `tests/` : tests de l'outil local.
 
