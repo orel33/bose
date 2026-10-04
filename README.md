@@ -10,10 +10,10 @@ Docker sur le réseau de la maison. Aucun Home Assistant ni MQTT n'est nécessai
 | **3** | Radio Nova en direct | Le bridge lance la radio |
 | **4** | FIP en direct | Le bridge lance la radio |
 | **5** | Radio Paradise (Main Mix) | Le bridge lance la radio |
-| **6 sur Veranda** | Bascule du groupe Veranda + Cuisine | Le service `bose-group-toggle` |
+| **6 sur Veranda ou Cuisine** | Bascule du groupe Veranda + Cuisine | Le service `bose-group-toggle` |
 
-Le bouton 6 reste vide sur Cuisine et Chambre. Sur Veranda, un repère local
-permet au service de reconnaître l'appui physique.
+Le bouton 6 reste vide sur Chambre. Sur Veranda et Cuisine, un repère local
+permet au service de reconnaître les appuis physiques.
 
 ## Comment ça fonctionne
 
@@ -23,13 +23,15 @@ Docker lance le service `bose-bridge`, qui exécute
 version **1.8.5**, dont l'image est fixée par empreinte dans `compose.yaml`.
 Ce dépôt fournit sa configuration et un outil de commande complémentaire.
 Ce conteneur utilise directement le bridge communautaire. Un second service,
-`bose-group-toggle`, écoute le bouton 6 de Veranda et pilote le groupe natif Bose.
+`bose-group-toggle`, écoute le bouton 6 de Veranda et de Cuisine et pilote leur
+groupe natif Bose.
 
 1. Le bridge se connecte à chaque enceinte et attend les événements de ses boutons.
 2. Un appui court sur **1 à 5** lui fait envoyer l'adresse de la radio à cette Bose.
 3. **La Bose télécharge et lit elle-même le flux audio.** Le son ne transite pas par le PC ou le Raspberry Pi.
-4. Sur Veranda, **6** crée le groupe avec Cuisine ; l'appui suivant le défait.
-   L'état réel du groupe est relu à chaque appui.
+4. Sur Veranda ou Cuisine, **6** crée le groupe ; l'appui suivant le défait.
+   L'enceinte qui joue et sur laquelle on appuie devient maître. Si elle est en
+   veille et que l'autre joue, l'autre reste maître.
 
 ```mermaid
 flowchart LR
@@ -146,7 +148,8 @@ variables d’environnement modifiées.
 
 Vérifier un message `ws connected` pour chaque enceinte et la connexion du
 service de groupe. `SYNC_PRESETS_ON_STARTUP=false` protège les presets radio.
-Au démarrage, le service de groupe vérifie uniquement le repère 6 sur Veranda.
+Au démarrage, le service de groupe vérifie uniquement le repère 6 sur Veranda
+et Cuisine.
 
 ## Utilisation et réglages
 
@@ -157,7 +160,7 @@ URL et utilise les événements des presets déjà enregistrés.
 La synchronisation `SYNC_PRESETS_ON_STARTUP` reste désactivée : le bridge
 ne modifie aucun preset au démarrage.
 Le bouton 6 reste sans URL dans le bridge radio ; son repère est mémorisé
-séparément sur Veranda. Les presets 3/4/5 sont enregistrés sur chaque
+séparément sur Veranda et Cuisine. Les presets 3/4/5 sont enregistrés sur chaque
 enceinte en `LOCAL_INTERNET_RADIO` avec le nom et l’URL de la radio. Un bouton
 vide n’émet pas l’événement attendu : ajouter son URL au fichier ne suffit pas
 pour l’activer sur une nouvelle enceinte.
@@ -175,10 +178,12 @@ formé. Les logs sont limités à trois fichiers de 5 Mo par service. Un contene
 
 ### Basculer le groupe avec le bouton 6
 
-Appuyer brièvement sur **6 de Veranda** pour grouper Veranda et Cuisine, puis
-une seconde fois pour les séparer. Utiliser Veranda pour changer de radio quand
-elles sont groupées. Le bouton 6 peut interrompre brièvement la lecture pendant
-que le service reprend la radio. Chambre n'entre jamais dans ce groupe.
+Appuyer brièvement sur **6 de Veranda ou de Cuisine** pour les grouper, puis
+sur **6 de l'une ou l'autre** pour les séparer. Utiliser l'enceinte maître pour
+changer de radio quand elles sont groupées. Le bouton 6 peut interrompre
+brièvement la lecture pendant que le service reprend la radio. Un appui sur le
+secondaire peut prendre quelques secondes pour séparer durablement le groupe.
+Chambre n'entre jamais dans ce groupe.
 
 Le même groupe se pilote aussi depuis un terminal, avec les noms des enceintes :
 
@@ -195,9 +200,10 @@ Le bouton physique 6 reste réservé au duo Veranda + Cuisine.
 
 Vérifier les actions du bouton 6 dans
 `docker compose logs --tail 50 bose-group-toggle`. Un appui simulé avec
-`python3 tools/bose.py key 6` teste le chemin réseau, mais ne prouve pas que le
-bouton physique fonctionne. Après la première affectation de 6, un redémarrage
-de Veranda peut être nécessaire pour que le bouton physique émette l'événement.
+`python3 tools/bose.py --host cuisine key 6` teste le chemin réseau de Cuisine ;
+sans `--host`, il cible Veranda. Ces essais simulés ne prouvent pas que le bouton
+physique fonctionne. Après la première affectation de 6, un redémarrage de
+l'enceinte peut être nécessaire pour que le bouton physique émette l'événement.
 
 Le 4 octobre 2026, le bouton physique 6 a été validé dans les deux sens après
 redémarrage de Veranda : le son était audible dans les deux pièces une fois le
@@ -396,6 +402,7 @@ python3 tools/bose.py --host cuisine reboot            # Redémarrer Cuisine via
 python3 tools/bose.py key 1                          # Simuler le bouton 1 (bridge requis)
 python3 tools/bose.py key 3                          # Simuler le bouton 3 Nova
 python3 tools/bose.py key 6                          # Simuler le bouton 6 sur Veranda
+python3 tools/bose.py --host cuisine key 6            # Simuler le bouton 6 sur Cuisine
 python3 tools/bose.py --host veranda zone join cuisine  # Grouper Veranda + Cuisine
 python3 tools/bose.py --host veranda zone leave cuisine # Séparer Veranda et Cuisine
 python3 tools/bose.py zone status                    # Lire les groupes
