@@ -12,8 +12,25 @@ import urllib.request
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
-HOSTS = ('192.168.0.152', '192.168.0.151', '192.168.0.153')
+SPEAKERS = {
+    'veranda': '192.168.0.152',
+    'cuisine': '192.168.0.151',
+    'chambre': '192.168.0.153',
+}
+HOSTS = tuple(SPEAKERS.values())
 HTTP = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+
+def resolve_host(value):
+    """Accepter les noms des enceintes et les anciennes adresses IP."""
+    host = SPEAKERS.get(value.casefold(), value)
+    if host not in HOSTS:
+        raise argparse.ArgumentTypeError('enceinte inconnue : choisir veranda, cuisine ou chambre')
+    return host
+
+
+def speaker_name(host):
+    return next((name.capitalize() for name, address in SPEAKERS.items() if address == host), host)
 
 
 def request(host, endpoint, body=None, port=8090, headers=None):
@@ -39,10 +56,10 @@ def backup(hosts):
             for endpoint in ('info', 'presets', 'sources', 'now_playing'):
                 raw, _ = request(host, endpoint)
                 save(directory / f'{endpoint}-{host}.xml', raw)
-            print(f'{host}: sauvegarde XML complète')
+            print(f'{speaker_name(host)}: sauvegarde XML complète')
         except Exception as exc:
             errors.append(host)
-            print(f'{host}: sauvegarde incomplète ({exc})', file=sys.stderr)
+            print(f'{speaker_name(host)}: sauvegarde incomplète ({exc})', file=sys.stderr)
     save(directory / 'manifest.json', json.dumps({'hosts': hosts, 'failed': errors}).encode())
     print(directory)
     if errors:
@@ -74,7 +91,7 @@ def compare(host, directory):
     current = slots(request(host, 'presets')[1])
     changed = [n for n in sorted(old.keys() | current.keys())
                if signature(old.get(n)) != signature(current.get(n))]
-    print(f'{host}: slots modifiés = {changed or "aucun"}')
+    print(f'{speaker_name(host)}: slots modifiés = {changed or "aucun"}')
     if changed:
         raise RuntimeError('Des presets diffèrent de la sauvegarde')
 
@@ -88,7 +105,7 @@ def restore(host, directory, apply):
     before = slots(request(host, 'presets')[1])
     if not all(n in original for n in ('1', '2')):
         raise ValueError('Sauvegarde sans slots 1/2 : restauration automatique refusée')
-    print(f'{host}: restauration des seuls slots 1 et 2 ; apply={apply}')
+    print(f'{speaker_name(host)}: restauration des seuls slots 1 et 2 ; apply={apply}')
     if not apply:
         return
     backup([host])
@@ -136,7 +153,7 @@ def reboot(host):
             banner.extend(chunk)
         connection.settimeout(6)
         connection.sendall(b'sys reboot\r\n')
-    print(f'{host}: commande sys reboot envoyée sur le port 17000.')
+    print(f'{speaker_name(host)}: commande sys reboot envoyée sur le port 17000.')
     print('Attendre environ une minute, puis vérifier avec la commande status. '
           'Le retour de l’enceinte n’est pas vérifié automatiquement.')
 
@@ -145,7 +162,7 @@ def status(host):
     info = request(host, 'info')[1]
     playing = request(host, 'now_playing')[1]
     presets = slots(request(host, 'presets')[1])
-    print(f'{host}: {info.findtext("name")} ; source={playing.get("source")} ; état={playing.findtext("playStatus")}')
+    print(f'{speaker_name(host)}: {info.findtext("name")} ; source={playing.get("source")} ; état={playing.findtext("playStatus")}')
     print('Presets :', ', '.join(f'{n}={c.get("source")}' for n, c in presets.items()))
 
 
@@ -207,11 +224,15 @@ def zone(master, action, members):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--host', default=HOSTS[0], choices=HOSTS)
+    parser.add_argument('--host', default=HOSTS[0], type=resolve_host,
+                        choices=HOSTS, metavar='{veranda,cuisine,chambre}',
+                        help='Enceinte cible (Veranda par défaut ; les anciennes IP restent acceptées)')
     sub = parser.add_subparsers(dest='command', required=True)
     sub.add_parser('status')
-    z = sub.add_parser('zone', help='Groupe natif Veranda + Cuisine')
+    z = sub.add_parser('zone', help='Former, séparer ou consulter un groupe natif Bose')
     z.add_argument('action', choices=('status', 'join', 'leave', 'toggle'))
+    z.add_argument('members', nargs='*', type=resolve_host, metavar='enceinte',
+                   help='Membres du groupe (Cuisine par défaut avec Veranda)')
     sub.add_parser('probe')
     sub.add_parser('reboot', help='Redémarrer immédiatement la Bose sélectionnée via Telnet (port 17000)')
     b = sub.add_parser('backup')
@@ -232,22 +253,30 @@ def main():
     elif args.command == 'status':
         status(args.host)
     elif args.command == 'zone':
-        if args.host != HOSTS[0]:
-            raise ValueError('Le maître du groupe doit être Veranda')
         if args.action == 'status':
-            for host in (HOSTS[0], HOSTS[1]):
+            targets = tuple(dict.fromkeys((args.host, *args.members))) if args.members else HOSTS
+            names_by_id = {request(host, 'info')[1].get('deviceID'): speaker_name(host)
+                           for host in targets}
+            for host in targets:
                 current = request(host, 'getZone')[1]
-                members = [node.get('ipaddress') for node in current.findall('member')]
-                print(f'{host}: maître={current.get("master") or "aucun"}, membres={members}')
+                members = [speaker_name(node.get('ipaddress')) for node in current.findall('member')]
+                master = current.get('master')
+                print(f'{speaker_name(host)}: maître={names_by_id.get(master, master) if master else "aucun"}, membres={members}')
         else:
-            result = zone(HOSTS[0], args.action, (HOSTS[1],))
-            print(f'Groupe Veranda + Cuisine {"activé" if result == "join" else "désactivé"}.')
+            members = tuple(args.members)
+            if not members and args.host == SPEAKERS['veranda']:
+                members = (SPEAKERS['cuisine'],)
+            if not members:
+                parser.error('indiquer au moins un membre après zone join, leave ou toggle')
+            result = zone(args.host, args.action, members)
+            names = ' + '.join(speaker_name(host) for host in (args.host, *members))
+            print(f'Groupe {names} {"activé" if result == "join" else "désactivé"}.')
     elif args.command == 'reboot':
         reboot(args.host)
     elif args.command == 'probe':
         for port in (8080, 8090, 8091):
             with socket.create_connection((args.host, port), 3):
-                print(f'{args.host}:{port} accessible')
+                print(f'{speaker_name(args.host)} : port {port} accessible')
     elif args.command == 'compare':
         compare(args.host, args.directory)
     elif args.command == 'restore':

@@ -75,7 +75,7 @@ class Reboot(unittest.TestCase):
 
     def test_cuisine_cli_waits_for_fragmented_prompt_and_sends_once(self):
         self.connection.recv.side_effect = [b'Console\r\n-', b'>']
-        with patch('sys.argv', ['bose.py', '--host', '192.168.0.151', 'reboot']):
+        with patch('sys.argv', ['bose.py', '--host', 'cuisine', 'reboot']):
             bose.main()
         self.create_connection.assert_called_once_with(('192.168.0.151', 17000), timeout=6)
         self.connection.sendall.assert_called_once_with(b'sys reboot\r\n')
@@ -115,6 +115,40 @@ class Reboot(unittest.TestCase):
             bose.reboot('192.168.0.151')
         self.connection.sendall.assert_called_once()
         self.create_connection.assert_called_once()
+
+
+class NamedHosts(unittest.TestCase):
+    def test_names_target_the_expected_speakers(self):
+        for name, host in bose.SPEAKERS.items():
+            with self.subTest(name=name), patch('sys.argv', ['bose.py', '--host', name, 'status']), \
+                 patch.object(bose, 'status') as status:
+                bose.main()
+                status.assert_called_once_with(host)
+
+    def test_ip_alias_still_works(self):
+        self.assertEqual(bose.resolve_host('192.168.0.151'), bose.SPEAKERS['cuisine'])
+
+    def test_named_members_control_the_group(self):
+        with patch('sys.argv', ['bose.py', '--host', 'veranda', 'zone', 'join', 'cuisine']), \
+             patch.object(bose, 'zone', return_value='join') as zone:
+            bose.main()
+        zone.assert_called_once_with(bose.SPEAKERS['veranda'], 'join',
+                                     (bose.SPEAKERS['cuisine'],))
+
+    def test_multiple_named_members(self):
+        with patch('sys.argv', ['bose.py', '--host', 'cuisine', 'zone', 'leave',
+                                'veranda', 'chambre']), \
+             patch.object(bose, 'zone', return_value='leave') as zone:
+            bose.main()
+        zone.assert_called_once_with(bose.SPEAKERS['cuisine'], 'leave',
+                                     (bose.SPEAKERS['veranda'], bose.SPEAKERS['chambre']))
+
+    def test_old_pair_command_keeps_its_default_member(self):
+        with patch('sys.argv', ['bose.py', 'zone', 'toggle']), \
+             patch.object(bose, 'zone', return_value='join') as zone:
+            bose.main()
+        zone.assert_called_once_with(bose.SPEAKERS['veranda'], 'toggle',
+                                     (bose.SPEAKERS['cuisine'],))
 
 
 if __name__ == '__main__':

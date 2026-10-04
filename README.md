@@ -101,7 +101,7 @@ aucune compilation n'est nécessaire. Le bridge a été installé sur un Raspber
    | Bose Veranda | `192.168.0.152` |
    | Bose Chambre | `192.168.0.153` |
 
-   Si les IP changent, adapter aussi la liste `HOSTS` de `tools/bose.py`.
+   Si les IP changent, adapter aussi la table `SPEAKERS` de `tools/bose.py`.
 
 4. **Avant de démarrer sur le Pi, arrêter l'ancien bridge sur le PC** avec
    `docker compose down`, depuis son dossier `bose`. Une seule instance doit
@@ -180,9 +180,21 @@ une seconde fois pour les séparer. Utiliser Veranda pour changer de radio quand
 elles sont groupées. Le bouton 6 peut interrompre brièvement la lecture pendant
 que le service reprend la radio. Chambre n'entre jamais dans ce groupe.
 
-Vérifier l'état réel avec `python3 tools/bose.py zone status` et les actions dans
-`docker compose logs --tail 50 bose-group-toggle`. Pour une séparation manuelle,
-utiliser `python3 tools/bose.py zone leave`. Un appui simulé avec
+Le même groupe se pilote aussi depuis un terminal, avec les noms des enceintes :
+
+```bash
+python3 tools/bose.py --host veranda zone join cuisine    # Former le groupe
+python3 tools/bose.py --host veranda zone leave cuisine   # Le séparer
+python3 tools/bose.py zone status                          # Lire les trois groupes
+```
+
+`zone toggle cuisine` bascule selon l'état réel. Le maître est indiqué par
+`--host` ; sans cette option, c'est Veranda. Il est aussi possible de nommer
+plusieurs membres après l'action, par exemple `zone join cuisine chambre`.
+Le bouton physique 6 reste réservé au duo Veranda + Cuisine.
+
+Vérifier les actions du bouton 6 dans
+`docker compose logs --tail 50 bose-group-toggle`. Un appui simulé avec
 `python3 tools/bose.py key 6` teste le chemin réseau, mais ne prouve pas que le
 bouton physique fonctionne. Après la première affectation de 6, un redémarrage
 de Veranda peut être nécessaire pour que le bouton physique émette l'événement.
@@ -232,11 +244,12 @@ Depuis le dossier du projet, sur le PC ou le Pi connecté au même réseau :
 
 ```bash
 # Redémarrer uniquement Bose Cuisine
-python3 tools/bose.py --host 192.168.0.151 reboot
+python3 tools/bose.py --host cuisine reboot
 ```
 
-Remplacer l’adresse par `192.168.0.152` pour Veranda ou `192.168.0.153` pour
-Chambre. Sans `--host`, l’outil cible **Veranda**, comme ses autres commandes.
+Utiliser `--host veranda` ou `--host chambre` pour les autres enceintes. Sans
+`--host`, l’outil cible **Veranda**, comme ses autres commandes. Les anciennes
+adresses IP restent acceptées pour les scripts existants.
 
 La commande agit immédiatement sur l’enceinte sélectionnée : elle attend
 l’invite `->` de la console du port 17000, puis envoie `sys reboot`. Elle utilise
@@ -248,7 +261,7 @@ Le message de succès indique que la commande a été envoyée, pas que l’ence
 est déjà revenue. Attendre environ une minute puis exécuter :
 
 ```bash
-python3 tools/bose.py --host 192.168.0.151 status
+python3 tools/bose.py --host cuisine status
 ```
 
 La commande a été testée avec une console simulée ; aucun redémarrage réel n’a
@@ -299,7 +312,7 @@ boutons 4 et 5 sur Veranda.
 Depuis le dossier du projet, vérifier que Cuisine répond :
 
 ```bash
-python3 tools/bose.py --host 192.168.0.151 status
+python3 tools/bose.py --host cuisine status
 ```
 
 Sur le Pi, vérifier la reconnexion du bridge :
@@ -377,14 +390,15 @@ Depuis ce dossier, sur le Pi ou un autre ordinateur du LAN :
 
 ```bash
 python3 tools/bose.py status                         # État de Veranda par défaut
-python3 tools/bose.py --host 192.168.0.151 status      # État de Cuisine
+python3 tools/bose.py --host cuisine status            # État de Cuisine
 python3 tools/bose.py probe                          # Tester les trois ports de Veranda
-python3 tools/bose.py --host 192.168.0.151 reboot      # Redémarrer Cuisine via Telnet
+python3 tools/bose.py --host cuisine reboot            # Redémarrer Cuisine via Telnet
 python3 tools/bose.py key 1                          # Simuler le bouton 1 (bridge requis)
 python3 tools/bose.py key 3                          # Simuler le bouton 3 Nova
 python3 tools/bose.py key 6                          # Simuler le bouton 6 sur Veranda
-python3 tools/bose.py zone status                    # Lire le groupe Veranda + Cuisine
-python3 tools/bose.py zone leave                     # Séparer les deux enceintes
+python3 tools/bose.py --host veranda zone join cuisine  # Grouper Veranda + Cuisine
+python3 tools/bose.py --host veranda zone leave cuisine # Séparer Veranda et Cuisine
+python3 tools/bose.py zone status                    # Lire les groupes
 python3 tools/bose.py radio 1                        # Lancer directement France Inter, sans bridge
 python3 tools/bose.py radio 4                        # Lancer directement FIP
 python3 tools/bose.py radio 5                        # Lancer directement Radio Paradise
