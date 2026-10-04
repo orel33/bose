@@ -10,22 +10,26 @@ Docker sur le réseau de la maison. Aucun Home Assistant ni MQTT n'est nécessai
 | **3** | Radio Nova en direct | Le bridge lance la radio |
 | **4** | FIP en direct | Le bridge lance la radio |
 | **5** | Radio Paradise (Main Mix) | Le bridge lance la radio |
-| **6** | Vide, réservé pour un futur usage | Aucune affectation |
+| **6 sur Veranda** | Bascule du groupe Veranda + Cuisine | Le service `bose-group-toggle` |
 
-Le bouton 6 est vide sur les trois enceintes.
+Le bouton 6 reste vide sur Cuisine et Chambre. Sur Veranda, un repère local
+permet au service de reconnaître l'appui physique.
 
 ## Comment ça fonctionne
 
-Docker lance **un conteneur**, service `bose-bridge`, qui exécute
+Docker lance le service `bose-bridge`, qui exécute
 `python3 -u /bridge.py`, la commande standard de l'image du
 [bridge communautaire de sandervg](https://github.com/sandervg/homeassistant-bose-soundtouch-bridge),
 version **1.8.5**, dont l'image est fixée par empreinte dans `compose.yaml`.
 Ce dépôt fournit sa configuration et un outil de commande complémentaire.
-Le conteneur utilise directement le bridge communautaire.
+Ce conteneur utilise directement le bridge communautaire. Un second service,
+`bose-group-toggle`, écoute le bouton 6 de Veranda et pilote le groupe natif Bose.
 
 1. Le bridge se connecte à chaque enceinte et attend les événements de ses boutons.
 2. Un appui court sur **1 à 5** lui fait envoyer l'adresse de la radio à cette Bose.
 3. **La Bose télécharge et lit elle-même le flux audio.** Le son ne transite pas par le PC ou le Raspberry Pi.
+4. Sur Veranda, **6** crée le groupe avec Cuisine ; l'appui suivant le défait.
+   L'état réel du groupe est relu à chaque appui.
 
 ```mermaid
 flowchart LR
@@ -33,12 +37,13 @@ flowchart LR
     P -->|Commandes · HTTP 8090 / UPnP 8091| B
     R[Radio France / Nova / Radio Paradise] -->|Flux audio Internet| B
     T[tools/bose.py · commande ponctuelle] -->|API locale 8090 / 8091| B
+    G[bose-group-toggle · bouton 6] -->|WebSocket 8080 et API 8090| B
 ```
 
 ### Quels ports ?
 
-**Le bridge n'ouvre aucun serveur TCP sur l'hôte : aucun port d'interface web
-ou d'API à visiter.** Il ouvre des connexions sortantes vers les ports des Bose :
+**Les services n'ouvrent aucun serveur TCP sur l'hôte : aucun port d'interface web
+ou d'API à visiter.** Ils ouvrent des connexions sortantes vers les ports des Bose :
 
 | Port sur chaque Bose | Usage |
 | --- | --- |
@@ -46,7 +51,7 @@ ou d'API à visiter.** Il ouvre des connexions sortantes vers les ports des Bose
 | **8090/TCP** | API Bose : informations, presets et commandes natives |
 | **8091/TCP** | UPnP : demander la lecture d'une radio |
 
-Le conteneur partage le réseau de l'hôte (`network_mode: host`). La découverte
+Les conteneurs partagent le réseau de l'hôte (`network_mode: host`). La découverte
 UPnP peut aussi utiliser SSDP, multicast UDP vers le port 1900. Tout reste sur
 le LAN pour le pilotage ; Internet est nécessaire pour les radios.
 Aucune redirection de ports sur la box n'est nécessaire.
@@ -57,8 +62,8 @@ Le bridge n’utilise pas ce port.
 
 ### Faut-il laisser la machine allumée ?
 
-**Oui, pour les radios sur 1 à 5.**
-Docker maintient le bridge en arrière-plan, même après fermeture du terminal.
+**Oui, pour les radios sur 1 à 5 et la bascule du bouton 6.**
+Docker maintient les services en arrière-plan, même après fermeture du terminal.
 Si le bridge s'arrête, une lecture déjà lancée peut continuer.
 
 ## Installation sur Raspberry Pi
@@ -109,11 +114,12 @@ aucune compilation n'est nécessaire. Le bridge a été installé sur un Raspber
    docker compose logs --tail 50 -f
    ```
 
-   Attendre un message `ws connected` pour chaque IP, puis essayer les boutons.
+   Attendre un message `ws connected` pour chaque IP et
+   `[group] WebSocket connecté` pour Veranda, puis essayer les boutons.
    `Ctrl+C` quitte l'affichage des logs, pas le bridge. Si Docker demande des
    droits supplémentaires, préfixer les commandes `docker` par `sudo`.
 
-La politique `restart: unless-stopped` relance le conteneur avec Docker après
+La politique `restart: unless-stopped` relance les conteneurs avec Docker après
 un redémarrage du Pi, sauf s'il a été arrêté volontairement. Garder le Pi allumé
 et éviter sa mise en veille. Si une Bose était indisponible au démarrage et
 n'apparaît pas connectée dans les logs, la rallumer puis lancer
@@ -138,9 +144,9 @@ locales, les examiner et les conserver avant de reprendre la mise à jour.
 `config/radios.env` ; un simple `docker compose restart` ne recharge pas les
 variables d’environnement modifiées.
 
-Vérifier un message `ws connected` pour chaque enceinte. La mise à jour du dépôt
-et du conteneur ne mémorise pas de nouveaux presets dans les enceintes, car
-`SYNC_PRESETS_ON_STARTUP=false`.
+Vérifier un message `ws connected` pour chaque enceinte et la connexion du
+service de groupe. `SYNC_PRESETS_ON_STARTUP=false` protège les presets radio.
+Au démarrage, le service de groupe vérifie uniquement le repère 6 sur Veranda.
 
 ## Utilisation et réglages
 
@@ -150,21 +156,43 @@ Les boutons **1 à 5 ne sont pas réécrits au démarrage** : le bridge charge l
 URL et utilise les événements des presets déjà enregistrés.
 La synchronisation `SYNC_PRESETS_ON_STARTUP` reste désactivée : le bridge
 ne modifie aucun preset au démarrage.
-Le bouton 6 reste sans URL. Les presets 3/4/5 sont enregistrés sur chaque
+Le bouton 6 reste sans URL dans le bridge radio ; son repère est mémorisé
+séparément sur Veranda. Les presets 3/4/5 sont enregistrés sur chaque
 enceinte en `LOCAL_INTERNET_RADIO` avec le nom et l’URL de la radio. Un bouton
 vide n’émet pas l’événement attendu : ajouter son URL au fichier ne suffit pas
 pour l’activer sur une nouvelle enceinte.
 
 ```bash
-docker compose ps                 # État du conteneur
+docker compose ps                 # État des deux conteneurs
 docker compose logs --tail 50      # Connexions et derniers appuis
-docker compose restart            # Redémarrer le bridge
-docker compose down               # Arrêter et retirer le conteneur
+docker compose restart            # Redémarrer les services
+docker compose down               # Arrêter et retirer les conteneurs
 ```
 
-L'arrêt du conteneur ne supprime pas les presets. Les logs sont
-limités à trois fichiers de 5 Mo. Un conteneur « Up » doit aussi avoir ses
-connexions `ws connected` pour rendre les boutons opérationnels.
+L'arrêt des conteneurs ne supprime pas les presets ni ne sépare un groupe déjà
+formé. Les logs sont limités à trois fichiers de 5 Mo par service. Un conteneur
+« Up » doit aussi avoir sa connexion WebSocket pour rendre ses boutons opérationnels.
+
+### Basculer le groupe avec le bouton 6
+
+Appuyer brièvement sur **6 de Veranda** pour grouper Veranda et Cuisine, puis
+une seconde fois pour les séparer. Utiliser Veranda pour changer de radio quand
+elles sont groupées. Le bouton 6 peut interrompre brièvement la lecture pendant
+que le service reprend la radio. Chambre n'entre jamais dans ce groupe.
+
+Vérifier l'état réel avec `python3 tools/bose.py zone status` et les actions dans
+`docker compose logs --tail 50 bose-group-toggle`. Pour une séparation manuelle,
+utiliser `python3 tools/bose.py zone leave`. Un appui simulé avec
+`python3 tools/bose.py key 6` teste le chemin réseau, mais ne prouve pas que le
+bouton physique fonctionne. Après la première affectation de 6, un redémarrage
+de Veranda peut être nécessaire pour que le bouton physique émette l'événement.
+
+Le 4 octobre 2026, le bouton physique 6 a été validé dans les deux sens après
+redémarrage de Veranda : le son était audible dans les deux pièces une fois le
+groupe formé, puis Cuisine s'est arrêtée à la séparation. Durant cet essai,
+**seul `bose-group-toggle` tourne sur le PC** ; le bridge radio reste sur le Pi.
+Avant de lancer ce service sur le Pi, l'arrêter sur le PC avec
+`docker compose stop bose-group-toggle` pour éviter deux bascules par appui.
 
 ### Activer un bouton auparavant vide
 
@@ -354,6 +382,9 @@ python3 tools/bose.py probe                          # Tester les trois ports de
 python3 tools/bose.py --host 192.168.0.151 reboot      # Redémarrer Cuisine via Telnet
 python3 tools/bose.py key 1                          # Simuler le bouton 1 (bridge requis)
 python3 tools/bose.py key 3                          # Simuler le bouton 3 Nova
+python3 tools/bose.py key 6                          # Simuler le bouton 6 sur Veranda
+python3 tools/bose.py zone status                    # Lire le groupe Veranda + Cuisine
+python3 tools/bose.py zone leave                     # Séparer les deux enceintes
 python3 tools/bose.py radio 1                        # Lancer directement France Inter, sans bridge
 python3 tools/bose.py radio 4                        # Lancer directement FIP
 python3 tools/bose.py radio 5                        # Lancer directement Radio Paradise
@@ -362,7 +393,8 @@ python3 tools/bose.py --help
 
 ## Contenu du dépôt
 
-- [`compose.yaml`](compose.yaml) : lancement du bridge Docker.
+- [`compose.yaml`](compose.yaml) : lancement du bridge radio et du service de groupe.
+- [`bridge/group_toggle.py`](bridge/group_toggle.py) : bascule du groupe avec le bouton 6.
 - [`config/radios.env`](config/radios.env) : configuration des cinq radios.
 - [`tools/bose.py`](tools/bose.py) : commandes manuelles et diagnostic.
 - `tests/` : tests de l'outil local.

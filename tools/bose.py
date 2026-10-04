@@ -149,11 +149,69 @@ def status(host):
     print('Presets :', ', '.join(f'{n}={c.get("source")}' for n, c in presets.items()))
 
 
+def zone(master, action, members):
+    """Basculer un groupe natif limité au maître et aux membres indiqués."""
+    members = tuple(members)
+    if action not in ('join', 'leave', 'toggle') or not members or master in members:
+        raise ValueError('Configuration du groupe invalide')
+    hosts = (master, *members)
+    if len(set(hosts)) != len(hosts):
+        raise ValueError('Enceinte dupliquée dans le groupe')
+    identities = {host: request(host, 'info')[1].get('deviceID') for host in hosts}
+    if not all(identities.values()) or len(set(identities.values())) != len(hosts):
+        raise ValueError('Identités des enceintes absentes ou dupliquées')
+    current = {host: request(host, 'getZone')[1] for host in hosts}
+    zone_master = current[master].get('master')
+    if zone_master and zone_master != identities[master]:
+        raise RuntimeError('Veranda est secondaire dans un autre groupe')
+    actual_members = {node.get('ipaddress') for node in current[master].findall('member')}
+    if zone_master and actual_members - set(hosts):
+        raise RuntimeError('Le groupe contient une autre enceinte ; aucune modification')
+    for host in members:
+        other_master = current[host].get('master')
+        if other_master and other_master != identities[master]:
+            raise RuntimeError(f'{host} appartient à un autre groupe')
+    if action == 'toggle':
+        action = 'leave' if zone_master and set(members) <= actual_members else 'join'
+    if action == 'join':
+        if zone_master and set(members) <= actual_members:
+            return 'join'
+        body = ET.Element('zone', master=identities[master])
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as connection:
+            connection.connect((master, 8090))
+            body.set('senderIPAddress', connection.getsockname()[0])
+        for host in hosts:
+            ET.SubElement(body, 'member', ipaddress=host).text = identities[host]
+        request(master, 'setZone', ET.tostring(body))
+    elif zone_master:
+        # Le firmware ST10 retire un seul secondaire par requête.
+        for host in members:
+            if host in actual_members:
+                body = ET.Element('zone', master=identities[master])
+                ET.SubElement(body, 'member', ipaddress=host).text = identities[host]
+                request(master, 'removeZoneSlave', ET.tostring(body))
+    else:
+        return 'leave'
+    for _ in range(10):
+        time.sleep(0.5)
+        updated = {host: request(host, 'getZone')[1] for host in hosts}
+        if action == 'join':
+            complete = (all(root.get('master') == identities[master] for root in updated.values())
+                        and {node.get('ipaddress') for node in updated[master].findall('member')} == set(hosts))
+        else:
+            complete = all(not root.get('master') for root in updated.values())
+        if complete:
+            return action
+    raise RuntimeError('État du groupe non confirmé ; relire /getZone')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--host', default=HOSTS[0], choices=HOSTS)
     sub = parser.add_subparsers(dest='command', required=True)
     sub.add_parser('status')
+    z = sub.add_parser('zone', help='Groupe natif Veranda + Cuisine')
+    z.add_argument('action', choices=('status', 'join', 'leave', 'toggle'))
     sub.add_parser('probe')
     sub.add_parser('reboot', help='Redémarrer immédiatement la Bose sélectionnée via Telnet (port 17000)')
     b = sub.add_parser('backup')
@@ -162,7 +220,7 @@ def main():
     p.add_argument('slot', choices=('1', '2', '3', '4', '5'))
     sub.add_parser('play', help='Envoyer Play séparément si nécessaire')
     k = sub.add_parser('key', help='Appui court simulé, sans mémorisation')
-    k.add_argument('slot', choices=('1', '2', '3', '4', '5'))
+    k.add_argument('slot', choices=('1', '2', '3', '4', '5', '6'))
     for name in ('compare', 'restore'):
         p = sub.add_parser(name)
         p.add_argument('directory', type=Path)
@@ -173,6 +231,17 @@ def main():
         backup(list(HOSTS) if args.all else [args.host])
     elif args.command == 'status':
         status(args.host)
+    elif args.command == 'zone':
+        if args.host != HOSTS[0]:
+            raise ValueError('Le maître du groupe doit être Veranda')
+        if args.action == 'status':
+            for host in (HOSTS[0], HOSTS[1]):
+                current = request(host, 'getZone')[1]
+                members = [node.get('ipaddress') for node in current.findall('member')]
+                print(f'{host}: maître={current.get("master") or "aucun"}, membres={members}')
+        else:
+            result = zone(HOSTS[0], args.action, (HOSTS[1],))
+            print(f'Groupe Veranda + Cuisine {"activé" if result == "join" else "désactivé"}.')
     elif args.command == 'reboot':
         reboot(args.host)
     elif args.command == 'probe':

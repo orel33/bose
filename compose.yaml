@@ -24,3 +24,25 @@ services:
       options:
         max-size: "5m"
         max-file: "3"
+
+  bose-group-toggle:
+    image: ghcr.io/sandervg/bose-soundtouch-bridge:1.8.5@sha256:b5eb0f483a61013be1868796ee2c9464f8e34a645ab0fc67ef913e8b958e0a5d
+    command: ["python3", "-u", "/local/bridge/group_toggle.py"]
+    volumes:
+      - ./bridge:/local/bridge:ro
+      - ./tools:/local/tools:ro
+    network_mode: host
+    restart: unless-stopped
+    read_only: true
+    user: "65534:65534"
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    environment:
+      PYTHONDONTWRITEBYTECODE: "1"
+      GROUP_MASTER_HOST: "192.168.0.152"
+      GROUP_MEMBER_HOST: "192.168.0.151"
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
