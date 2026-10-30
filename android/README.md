@@ -11,6 +11,9 @@ le demande. Le téléphone doit être connecté au Wi-Fi qui atteint les Bose
 (`192.168.0.0/24`). Aucun compte ni Raspberry Pi n'est requis pour les commandes
 de l'application.
 
+L'APK demande Android 8.0 minimum et cible Android 16 (API 36), pour rester
+installable sur les versions récentes sans changer la permission réseau locale.
+
 L'application propose les cinq radios de `config/radios.env`, lecture/pause,
 arrêt, veille, volume, sourdine, groupe Veranda + Cuisine et redémarrage de
 l'enceinte sélectionnée. Le redémarrage demande une confirmation et utilise la
