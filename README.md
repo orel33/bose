@@ -15,16 +15,22 @@ Docker sur le réseau de la maison. Aucun Home Assistant ni MQTT n'est nécessai
 Le bouton 6 reste vide sur Chambre. Sur Veranda et Cuisine, un repère local
 permet au service de reconnaître les appuis physiques.
 
+L'[application Android Bose Maison](android/README.md) pilote les trois enceintes
+depuis le téléphone : radios, volume, lecture, groupe et redémarrage. Son APK
+signé se trouve dans `android/build/bose-maison.apk` après `bash android/build.sh`.
+
 ## Comment ça fonctionne
 
-Docker lance le service `bose-bridge`, qui exécute
-`python3 -u /bridge.py`, la commande standard de l'image du
+Docker lance le service `bose-bridge` via `bridge/radio_retry.py`, qui exécute
+le code `/bridge.py` de l'image du
 [bridge communautaire de sandervg](https://github.com/sandervg/homeassistant-bose-soundtouch-bridge),
 version **1.8.5**, dont l'image est fixée par empreinte dans `compose.yaml`.
 Ce dépôt fournit sa configuration et un outil de commande complémentaire.
-Ce conteneur utilise directement le bridge communautaire. Un second service,
-`bose-group-toggle`, écoute le bouton 6 de Veranda et de Cuisine et pilote leur
-groupe natif Bose.
+Le lanceur réessaie l'initialisation si le réseau est indisponible. Un second
+service, `bose-group-toggle`, écoute le bouton 6 de Veranda et de Cuisine et
+pilote leur groupe natif Bose. Il réessaie aussi son initialisation si les
+enceintes sont momentanément inaccessibles. Les connexions WebSocket des deux
+services expirent et se recréent après une coupure de la Freebox.
 
 1. Le bridge se connecte à chaque enceinte et attend les événements de ses boutons.
 2. Un appui court sur **1 à 5** lui fait envoyer l'adresse de la radio à cette Bose.
@@ -67,6 +73,25 @@ Le bridge n’utilise pas ce port.
 **Oui, pour les radios sur 1 à 5 et la bascule du bouton 6.**
 Docker maintient les services en arrière-plan, même après fermeture du terminal.
 Si le bridge s'arrête, une lecture déjà lancée peut continuer.
+
+### Machine qui héberge actuellement les services
+
+Depuis le 30 octobre 2026, `bose-bridge` et `bose-group-toggle` tournent sur le
+Raspberry Pi `rpi5`. Son Ethernet (`192.168.1.220`) ne rejoint pas les Bose ; le
+Pi utilise le Wi-Fi (`192.168.0.220`) pour les enceintes (`192.168.0.151` à
+`.153`). L'économie d'énergie Wi-Fi est désactivée dans la connexion
+NetworkManager `preconfigured`, et `connection.autoconnect-retries` vaut `0`
+pour réessayer sans limite après une panne de la Freebox. Le lanceur
+`bridge/radio_retry.py` réessaie l'initialisation des enceintes après une
+coupure réseau au démarrage. Les deux services sont arrêtés sur le PC `prout`
+pour éviter des commandes concurrentes.
+
+La route `192.168.0.0/24 dev wlan0` apparaît lorsque le Wi-Fi est connecté et
+disparaît s'il décroche. Une route de test par l'Ethernet via `192.168.1.100`
+n'a pas permis de joindre Veranda. Après désactivation de l'économie d'énergie,
+un essai de 30 paquets vers la box Wi-Fi s'est terminé sans perte ; pour éliminer
+la dépendance au Wi-Fi, il faut relier l'Ethernet du Pi au LAN des enceintes ou
+configurer le routage entre les deux réseaux sur les équipements concernés.
 
 ## Installation sur Raspberry Pi
 
@@ -242,7 +267,8 @@ réseau concurrente et vérifier le son.
 ## Redémarrer une enceinte Bose
 
 Le redémarrage de l’enceinte est distinct de celui du bridge :
-`docker compose restart` redémarre seulement le conteneur sur le Pi.
+`docker compose restart` redémarre seulement les conteneurs sur la machine où
+la commande est exécutée.
 
 ### Avec tools/bose.py
 
@@ -321,15 +347,14 @@ Depuis le dossier du projet, vérifier que Cuisine répond :
 python3 tools/bose.py --host cuisine status
 ```
 
-Sur le Pi, vérifier la reconnexion du bridge :
+Sur la machine qui héberge le bridge, vérifier sa reconnexion :
 
 ```bash
-cd ~/bose
 docker compose logs --tail 50
 ```
 
 Si aucune nouvelle connexion `ws connected` n’apparaît pour l’enceinte alors
-qu’elle répond à nouveau, lancer `docker compose restart` sur le Pi. Enfin,
+qu’elle répond à nouveau, lancer `docker compose restart` sur cette machine. Enfin,
 essayer physiquement les boutons 4 et 5 et vérifier la lecture de FIP et de
 Radio Paradise.
 

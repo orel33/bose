@@ -2,6 +2,9 @@ services:
   bose-bridge:
     # Version 1.8.5 ; code vérifié contre d588efde08faec505d3c3401c1c074076288d501.
     image: ghcr.io/sandervg/bose-soundtouch-bridge:1.8.5@sha256:b5eb0f483a61013be1868796ee2c9464f8e34a645ab0fc67ef913e8b958e0a5d
+    command: ["python3", "-u", "/local/bridge/radio_retry.py"]
+    volumes:
+      - ./bridge:/local/bridge:ro
     network_mode: host
     restart: unless-stopped
     read_only: true

@@ -9,6 +9,8 @@ import xml.etree.ElementTree as ET
 
 import websocket
 
+websocket.setdefaulttimeout(5)
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))
 import bose
 
@@ -222,23 +224,35 @@ class GroupButton:
 
     def listen(self, host):
         while True:
-            try:
-                ws = websocket.create_connection(f'ws://{host}:8080',
-                                                 subprotocols=['gabbo'], timeout=10,
-                                                 http_proxy_host=None)
-                ws.settimeout(None)
+            def on_open(ws):
                 print(f'[group] WebSocket connecté : {bose.speaker_name(host)}', flush=True)
-                self.remember(host, bose.request(host, 'now_playing')[1])
-                self.refresh_group()
                 try:
-                    while True:
-                        self.on_message(host, ws.recv())
-                finally:
+                    self.remember(host, bose.request(host, 'now_playing')[1])
+                    self.refresh_group()
+                except Exception as exc:
+                    print(f'[group] état initial indisponible sur '
+                          f'{bose.speaker_name(host)} : {exc}', flush=True)
                     ws.close()
+
+            def on_message(ws, message):
+                self.on_message(host, message)
+
+            def on_error(ws, error):
+                print(f'[group] WebSocket {bose.speaker_name(host)} : {error}', flush=True)
+
+            ws = websocket.WebSocketApp(
+                f'ws://{host}:8080', subprotocols=['gabbo'],
+                on_open=on_open, on_message=on_message, on_error=on_error,
+            )
+            try:
+                ws.run_forever(ping_interval=10, ping_timeout=5, http_proxy_host=None)
             except Exception as exc:
-                print(f'[group] {bose.speaker_name(host)} : connexion perdue : {exc}'
-                      ' ; nouvel essai dans 3 s', flush=True)
-                time.sleep(3)
+                print(f'[group] WebSocket {bose.speaker_name(host)} : {exc}', flush=True)
+            finally:
+                ws.close()
+            print(f'[group] {bose.speaker_name(host)} : connexion perdue'
+                  ' ; nouvel essai dans 3 s', flush=True)
+            time.sleep(3)
 
     def poll_group(self):
         while True:
@@ -247,8 +261,15 @@ class GroupButton:
 
 
 def main():
-    group = GroupButton()
-    group.initialize()
+    while True:
+        group = GroupButton()
+        try:
+            group.initialize()
+            break
+        except (OSError, ET.ParseError) as exc:
+            print(f'[group] initialisation indisponible : {exc}'
+                  ' ; nouvel essai dans 5 s', flush=True)
+            time.sleep(5)
     threading.Thread(target=group.poll_group, daemon=True).start()
     threads = [threading.Thread(target=group.listen, args=(host,), daemon=True)
                for host in group.hosts]
