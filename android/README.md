@@ -5,14 +5,12 @@ Chambre. Les adresses IP sont préconfigurées dans `BoseClient.java`.
 
 ## Installer
 
-Copier `build/bose-maison.apk` sur le téléphone puis l'ouvrir. Autoriser
-l'installation depuis l'application utilisée pour ouvrir le fichier si Android
-le demande. Le téléphone doit être connecté au Wi-Fi qui atteint les Bose
-(`192.168.0.0/24`). Aucun compte ni Raspberry Pi n'est requis pour les commandes
-de l'application.
+Télécharger [l'APK signé depuis GitHub](https://github.com/orel33/bose/raw/refs/heads/main/android/build/bose-maison.apk), ou copier `build/bose-maison.apk` sur le téléphone, puis l'ouvrir. Autoriser l'installation depuis l'application utilisée pour ouvrir le fichier si Android le demande.
 
-L'APK demande Android 8.0 minimum et cible Android 16 (API 36), pour rester
-installable sur les versions récentes sans changer la permission réseau locale.
+Le téléphone doit être connecté au Wi-Fi qui atteint les Bose (`192.168.0.0/24`). L'application parle directement à leurs API locales : elle ne dépend ni du bridge Docker ni du Raspberry Pi. Elle continue donc à fonctionner si le bridge est arrêté. Le bridge sert séparément aux boutons physiques des enceintes.
+
+L'APK demande Android 8.0 minimum, cible Android 16 (API 36) et a été vérifié
+sur Android 17.
 
 L'application propose les cinq radios de `config/radios.env`, lecture/pause,
 arrêt, veille, volume, sourdine, groupe Veranda + Cuisine et redémarrage de
