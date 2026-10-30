@@ -193,7 +193,9 @@ public final class MainActivity extends Activity {
             LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, dp(50), 1);
             if (i > 0) p.leftMargin = dp(7);
             tabs.addView(tab, p);
-            tab.setOnClickListener(view -> selectSpeaker(speaker));
+            tab.setOnClickListener(new View.OnClickListener() {
+                @Override public void onClick(View view) { selectSpeaker(speaker); }
+            });
         }
 
         LinearLayout statusCard = card();
@@ -205,7 +207,9 @@ public final class MainActivity extends Activity {
         TextView refreshButton = label("Actualiser ↻", 13, ACCENT, true);
         refreshButton.setPadding(dp(5), dp(5), dp(5), dp(5));
         statusTop.addView(refreshButton);
-        refreshButton.setOnClickListener(view -> refresh());
+        refreshButton.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View view) { refresh(); }
+        });
         titleView = label("Connexion…", 22, TEXT, true);
         statusCard.addView(titleView, below(16));
         detailView = label("", 14, MUTED, false);
@@ -226,10 +230,16 @@ public final class MainActivity extends Activity {
                 LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, dp(55), 1);
                 if (index > start) p.leftMargin = dp(9);
                 radioRow.addView(radioButton, p);
-                radioButton.setOnClickListener(view -> {
-                    BoseClient.Speaker target = selected;
-                    perform("Lecture de " + radio.name, target,
-                            () -> BoseClient.radio(target, radio.url), true);
+                radioButton.setOnClickListener(new View.OnClickListener() {
+                    @Override public void onClick(View view) {
+                        final BoseClient.Speaker target = selected;
+                        perform("Lecture de " + radio.name, target,
+                                new Action() {
+                                    @Override public void run() throws Exception {
+                                        BoseClient.radio(target, radio.url);
+                                    }
+                                }, true);
+                    }
                 });
             }
         }
@@ -239,23 +249,31 @@ public final class MainActivity extends Activity {
         root.addView(controls, below(9));
         TextView playButton = button("Lecture / Pause", CARD_LIGHT);
         controls.addView(playButton, new LinearLayout.LayoutParams(0, dp(52), 1));
-        playButton.setOnClickListener(view -> sendKey("PLAY_PAUSE", "Lecture / pause"));
+        playButton.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View view) { sendKey("PLAY_PAUSE", "Lecture / pause"); }
+        });
         TextView stopButton = button("Arrêter", CARD_LIGHT);
         LinearLayout.LayoutParams stopParams = new LinearLayout.LayoutParams(0, dp(52), 1);
         stopParams.leftMargin = dp(9);
         controls.addView(stopButton, stopParams);
-        stopButton.setOnClickListener(view -> sendKey("STOP", "Arrêt"));
+        stopButton.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View view) { sendKey("STOP", "Arrêt"); }
+        });
 
         LinearLayout secondary = row();
         root.addView(secondary, below(9));
         muteButton = button("Couper le son", CARD_LIGHT);
         secondary.addView(muteButton, new LinearLayout.LayoutParams(0, dp(52), 1));
-        muteButton.setOnClickListener(view -> sendKey("MUTE", "Son modifié"));
+        muteButton.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View view) { sendKey("MUTE", "Son modifié"); }
+        });
         TextView powerButton = button("Veille / Marche", CARD_LIGHT);
         LinearLayout.LayoutParams powerParams = new LinearLayout.LayoutParams(0, dp(52), 1);
         powerParams.leftMargin = dp(9);
         secondary.addView(powerButton, powerParams);
-        powerButton.setOnClickListener(view -> sendKey("POWER", "Alimentation modifiée"));
+        powerButton.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View view) { sendKey("POWER", "Alimentation modifiée"); }
+        });
 
         LinearLayout volumeCard = card();
         root.addView(volumeCard, below(13));
@@ -278,8 +296,11 @@ public final class MainActivity extends Activity {
                 trackingVolume = false;
                 BoseClient.Speaker target = selected;
                 int value = bar.getProgress();
-                perform("Volume " + value + " %", target,
-                        () -> BoseClient.setVolume(target, value), true);
+                perform("Volume " + value + " %", target, new Action() {
+                    @Override public void run() throws Exception {
+                        BoseClient.setVolume(target, value);
+                    }
+                }, true);
             }
         });
 
@@ -291,16 +312,23 @@ public final class MainActivity extends Activity {
         groupButton = button("Former le groupe", ACCENT);
         groupButton.setTextColor(BACKGROUND);
         groupCard.addView(groupButton, below(12));
-        groupButton.setOnClickListener(view -> {
-            BoseClient.Speaker target = selected;
-            perform("Bascule du groupe", target,
-                    () -> BoseClient.toggleGroup(target), true);
+        groupButton.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View view) {
+                final BoseClient.Speaker target = selected;
+                perform("Bascule du groupe", target, new Action() {
+                    @Override public void run() throws Exception {
+                        BoseClient.toggleGroup(target);
+                    }
+                }, true);
+            }
         });
 
         section(root, "ENTRETIEN");
         TextView rebootButton = button("Redémarrer l’enceinte sélectionnée", Color.rgb(91, 52, 55));
         root.addView(rebootButton, below(9));
-        rebootButton.setOnClickListener(view -> confirmReboot());
+        rebootButton.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View view) { confirmReboot(); }
+        });
         root.addView(label("Le téléphone et les Bose doivent être sur le même réseau local.",
                 12, MUTED, false), below(16));
         updateTabs();
@@ -346,7 +374,8 @@ public final class MainActivity extends Activity {
     private void refresh() {
         BoseClient.Speaker speaker = selected;
         int generation = ++refreshGeneration;
-        worker.execute(() -> {
+        worker.execute(new Runnable() {
+            @Override public void run() {
             BoseClient.Snapshot snapshot = null;
             BoseClient.GroupState group = null;
             String speakerError = null;
@@ -359,11 +388,14 @@ public final class MainActivity extends Activity {
             BoseClient.GroupState finalGroup = group;
             String finalSpeakerError = speakerError;
             String finalGroupError = groupError;
-            runOnUiThread(() -> {
+            runOnUiThread(new Runnable() {
+                @Override public void run() {
                 if (selected != speaker || generation != refreshGeneration || isFinishing()) return;
                 renderSnapshot(finalSnapshot, finalSpeakerError);
                 renderGroup(finalGroup, finalGroupError);
+                }
             });
+            }
         });
     }
 
@@ -412,27 +444,35 @@ public final class MainActivity extends Activity {
 
     private void perform(String label, BoseClient.Speaker speaker, Action action, boolean refreshAfter) {
         messageView.setText(label + "…");
-        worker.execute(() -> {
+        worker.execute(new Runnable() {
+            @Override public void run() {
             try {
                 action.run();
-                runOnUiThread(() -> {
+                runOnUiThread(new Runnable() {
+                    @Override public void run() {
                     if (isFinishing()) return;
                     messageView.setText(label + " : envoyé");
                     if (refreshAfter) refresh();
+                    }
                 });
-            } catch (Exception error) {
-                runOnUiThread(() -> {
+            } catch (final Exception error) {
+                runOnUiThread(new Runnable() {
+                    @Override public void run() {
                     if (isFinishing()) return;
                     messageView.setText("Échec sur " + speaker.name + " : " + error.getMessage());
                     if (refreshAfter) refresh();
+                    }
                 });
+            }
             }
         });
     }
 
     private void sendKey(String key, String label) {
         BoseClient.Speaker target = selected;
-        perform(label, target, () -> BoseClient.key(target, key), true);
+        perform(label, target, new Action() {
+            @Override public void run() throws Exception { BoseClient.key(target, key); }
+        }, true);
     }
 
     private void confirmReboot() {
@@ -441,9 +481,13 @@ public final class MainActivity extends Activity {
                 .setTitle("Redémarrer " + target.name + " ?")
                 .setMessage("L’enceinte sera indisponible pendant environ une minute.")
                 .setNegativeButton("Annuler", null)
-                .setPositiveButton("Redémarrer", (dialog, which) -> perform(
-                        "Redémarrage de " + target.name, target,
-                        () -> BoseClient.reboot(target), false))
+                .setPositiveButton("Redémarrer", new android.content.DialogInterface.OnClickListener() {
+                    @Override public void onClick(android.content.DialogInterface dialog, int which) {
+                        perform("Redémarrage de " + target.name, target, new Action() {
+                            @Override public void run() throws Exception { BoseClient.reboot(target); }
+                        }, false);
+                    }
+                })
                 .show();
     }
 }
