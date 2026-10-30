@@ -7,6 +7,20 @@ build_tools="$sdk_dir/build-tools/28.0.2"
 android_jar="$sdk_dir/platforms/android-26/android.jar"
 build_dir="$app_dir/build"
 signing_dir="$app_dir/.signing"
+app_version=$(python3 - "$app_dir/AndroidManifest.xml" <<'PY'
+import re
+import sys
+import xml.etree.ElementTree as ET
+
+version = ET.parse(sys.argv[1]).getroot().get(
+    "{http://schemas.android.com/apk/res/android}versionName", ""
+)
+if not re.fullmatch(r"[0-9][A-Za-z0-9._-]*", version):
+    sys.exit("versionName absent ou invalide dans AndroidManifest.xml")
+print(version)
+PY
+)
+apk_file="$build_dir/bose-maison-$app_version.apk"
 
 for tool in aapt dx zipalign apksigner; do
   if [[ ! -x "$build_tools/$tool" ]]; then
@@ -58,7 +72,7 @@ BOSE_SIGNING_PASSWORD=$(cat "$password_file")
   --ks-key-alias bose-maison \
   --ks-pass env:BOSE_SIGNING_PASSWORD \
   --key-pass env:BOSE_SIGNING_PASSWORD \
-  --out "$build_dir/bose-maison.apk" "$build_dir/aligned.apk"
+  --out "$apk_file" "$build_dir/aligned.apk"
 unset BOSE_SIGNING_PASSWORD
-"$build_tools/apksigner" verify --verbose "$build_dir/bose-maison.apk"
-echo "APK prêt : $build_dir/bose-maison.apk"
+"$build_tools/apksigner" verify --verbose "$apk_file"
+echo "APK prêt : $apk_file"

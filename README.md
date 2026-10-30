@@ -17,8 +17,8 @@ permet au service de reconnaître les appuis physiques.
 
 L'[application Android Bose Maison](android/README.md) pilote les trois enceintes
 depuis le téléphone : radios, volume, lecture, groupe et redémarrage. Son APK
-signé se trouve dans `android/build/bose-maison.apk` après `bash android/build.sh`
-et peut aussi être [téléchargé depuis GitHub](https://github.com/orel33/bose/raw/refs/heads/main/android/build/bose-maison.apk).
+signé se trouve dans `android/build/bose-maison-1.2.apk` après `bash android/build.sh`
+et peut aussi être [téléchargé depuis GitHub](https://github.com/orel33/bose/raw/refs/heads/main/android/build/bose-maison-1.2.apk).
 L'application communique directement avec les Bose sur le réseau local : elle
 fonctionne sans le bridge Docker ni le Raspberry Pi. Le bridge reste nécessaire
 pour que les boutons physiques des enceintes lancent les radios ou basculent le
